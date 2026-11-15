@@ -77,7 +77,8 @@ export type DepositMethod =
   | 'bKash Personal'
   | 'Nagad Personal'
   | 'Rocket Personal'
-  | 'Upay Personal';
+  | 'Upay Personal'
+  | 'Binance Pay';
 
 export interface DepositRequest {
   id: string;

@@ -760,6 +760,7 @@ export interface DepositRow {
   user_id: string;
   user_name: string;
   amount: number;
+  usd_amount: number | null;
   method: string;
   sender_number: string;
   trx_id: string;
@@ -779,6 +780,7 @@ export async function fetchMyDeposits(): Promise<DepositRow[]> {
 
 export async function createDeposit(input: {
   amount: number;
+  usd_amount?: number;
   method: string;
   sender_number: string;
   trx_id: string;
@@ -797,6 +799,7 @@ export async function createDeposit(input: {
   const { error } = await supabase.from('deposits').insert({
     user_id: userId,
     amount: input.amount,
+    usd_amount: input.usd_amount ?? null,
     method: input.method,
     sender_number: input.sender_number,
     trx_id: input.trx_id,

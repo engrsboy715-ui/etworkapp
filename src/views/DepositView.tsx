@@ -6,8 +6,9 @@ import { UploadBox } from '@/views/CreateView';
 import { createDeposit, fetchMyDeposits, type DepositRow, type Profile } from '@/lib/supabase';
 import { useLanguage } from '@/lib/LanguageContext';
 import { cn } from '@/lib/cn';
-import { CASH_OUT_RATE_PER_1000, cashOutCharge } from '@/lib/paymentRates';
+import { BINANCE_PAY_ID, BINANCE_USD_TO_BDT, CASH_OUT_RATE_PER_1000, cashOutCharge } from '@/lib/paymentRates';
 import { BkashLogo, NagadLogo, RocketLogo, UpayLogo } from '@/components/BrandLogos';
+import { BinanceDepositFields, BinanceLogo } from '@/views/BinanceDepositFields';
 import {
   ChevronLeft, PlayCircle, History, Check, Clock, X, ShieldCheck,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ const METHOD_NUMBERS: Record<DepositMethod, string> = {
   'Nagad Personal': PRIMARY_NUMBER,
   'Rocket Personal': ROCKET_NUMBER,
   'Upay Personal': PRIMARY_NUMBER,
+  'Binance Pay': BINANCE_PAY_ID,
 };
 
 const METHODS: {
@@ -32,6 +34,7 @@ const METHODS: {
   { name: 'Nagad Personal', Logo: NagadLogo },
   { name: 'Rocket Personal', Logo: RocketLogo },
   { name: 'Upay Personal', Logo: UpayLogo },
+  { name: 'Binance Pay', Logo: BinanceLogo },
 ];
 
 const QUICK = [50, 100, 500, 1000, 2000, 5000];
@@ -47,6 +50,9 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
   const [toast, setToast] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [numCopied, setNumCopied] = useState(false);
+  const [usdAmount, setUsdAmount] = useState('');
+  const [binancePayer, setBinancePayer] = useState('');
+  const [binanceScreenshot, setBinanceScreenshot] = useState('');
 
   useEffect(() => {
     if (showHistory) fetchMyDeposits().then(setDeposits);
@@ -55,6 +61,7 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
   const active = METHODS.find((m) => m.name === method)!;
   const receiveNumber = METHOD_NUMBERS[method];
   const cashOutRate = CASH_OUT_RATE_PER_1000[method];
+  const isBinance = method === 'Binance Pay';
 
   const depositAmount = parseFloat(amount) || 0;
   const cashOutChargeVal = cashOutCharge(depositAmount, method);
@@ -72,7 +79,29 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
     }
   };
 
+  const requestSentMessage = t('ডিপোজিট রিকোয়েস্ট পাঠানো হয়েছে! অ্যাডমিন অনুমোদনের অপেক্ষায়।', 'Deposit request sent! Awaiting admin approval.');
+
+  const submitBinance = async () => {
+    const usd = parseFloat(usdAmount);
+    if (!usd || usd <= 0) return setToast(t('সঠিক ডলারের পরিমাণ লিখুন।', 'Please enter a valid USD amount.'));
+    if (!binancePayer.trim()) return setToast(t('আপনার Binance Pay ID, Gmail বা ফোন নম্বর লিখুন।', 'Enter your Binance Pay ID, Gmail, or phone number.'));
+    const res = await createDeposit({
+      amount: Math.round(usd * BINANCE_USD_TO_BDT * 100) / 100,
+      usd_amount: usd,
+      method,
+      sender_number: binancePayer.trim(),
+      trx_id: '',
+      screenshot: binanceScreenshot,
+      user_name: profile?.full_name || profile?.email || '',
+    });
+    if (res.success) {
+      setUsdAmount(''); setBinancePayer(''); setBinanceScreenshot('');
+    }
+    setToast(res.success ? requestSentMessage : res.message);
+  };
+
   const submit = async () => {
+    if (isBinance) return submitBinance();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return setToast(t('সঠিক টাকার পরিমাণ লিখুন।', 'Please enter a valid amount.'));
     if (!sender.trim()) return setToast(t('যে নম্বর থেকে টাকা পাঠিয়েছেন তা লিখুন।', 'Please enter the number you sent money from.'));
@@ -89,7 +118,7 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
     if (res.success) {
       setAmount(''); setSender(''); setTrxId(''); setScreenshot('');
     }
-    setToast(res.success ? t('ডিপোজিট রিকোয়েস্ট পাঠানো হয়েছে! অ্যাডমিন অনুমোদনের অপেক্ষায়।', 'Deposit request sent! Awaiting admin approval.') : res.message);
+    setToast(res.success ? requestSentMessage : res.message);
   };
 
   return (
@@ -120,7 +149,7 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
           </div>
         </div>
 
-        {/* Amount */}
+        {!isBinance && (
         <div className="card">
           <label className="label">{t('টাকার পরিমাণ (BDT)', 'Amount (BDT)')}</label>
           <div className="relative">
@@ -150,6 +179,8 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
           </div>
         </div>
 
+        )}
+
         {/* Payment method */}
         <div className="card">
           <label className="label">{t('পেমেন্ট মেথড', 'Payment Method')}</label>
@@ -172,7 +203,7 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
         </div>
 
         {/* Cash-out charge breakdown */}
-        {depositAmount > 0 && (
+        {!isBinance && depositAmount > 0 && (
           <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200/70 shadow-sm">
             <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">{t('ক্যাশ-আউট চার্জ বিবরণ', 'Cash-out Charge Details')}</p>
             <div className="space-y-2.5 text-sm">
@@ -197,7 +228,17 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
           </div>
         )}
 
-        {/* Deposit form */}
+        {isBinance ? (
+          <BinanceDepositFields
+            usdAmount={usdAmount}
+            onUsdAmountChange={setUsdAmount}
+            payerId={binancePayer}
+            onPayerIdChange={setBinancePayer}
+            screenshot={binanceScreenshot}
+            onScreenshotChange={setBinanceScreenshot}
+            onToast={setToast}
+          />
+        ) : (
         <div className="card space-y-4">
           <p className="text-sm font-bold text-slate-800">{t('পেমেন্টের বিবরণ', 'Payment Details')}</p>
 
@@ -250,6 +291,7 @@ export function DepositView({ onBack, profile }: { onBack: () => void; profile: 
             />
           </div>
         </div>
+        )}
 
         <button onClick={submit} className="brand-btn w-full py-3 text-base">
           <ShieldCheck size={18} /> {t('ডিপোজিট রিকোয়েস্ট পাঠান', 'Send Deposit Request')}
